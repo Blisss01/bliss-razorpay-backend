@@ -58,7 +58,7 @@ supabase = create_client(
 # =========================
 
 PRODUCT_PRICES = {
-    "Dark Chocolate Bar": 1,
+    "Dark Chocolate Bar": 59,
     "Pure Milk Chocolate": 59,
     "Twin Bliss Bar": 69,
     "Cherry Dark Indulgence": 69,
