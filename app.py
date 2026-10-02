@@ -23,7 +23,7 @@ client = razorpay.Client(auth=(KEY_ID, KEY_SECRET))
 
 # Server-side price list. Never trust prices sent by the browser.
 PRODUCT_PRICES = {
-    "Dark Chocolate Bar": 59,
+    "Dark Chocolate Bar": 1,
     "Pure Milk Chocolate": 59,
     "Twin Bliss Bar": 69,
     "Cherry Dark Indulgence": 69,
