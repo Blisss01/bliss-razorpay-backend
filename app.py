@@ -58,7 +58,7 @@ supabase = create_client(
 # =========================
 
 PRODUCT_PRICES = {
-    "Dark Chocolate Bar": 59,
+    "Dark Chocolate Bar": 1,
     "Pure Milk Chocolate": 59,
     "Twin Bliss Bar": 69,
     "Cherry Dark Indulgence": 69,
@@ -166,6 +166,28 @@ def create_order():
             body.get("items")
         )
 
+        # Customer details from checkout form
+        customer = body.get("customer") or {}
+        customer_name = str(customer.get("name", "")).strip()
+        customer_address = str(customer.get("address", "")).strip()
+        customer_state = str(customer.get("state", "")).strip()
+        customer_city = str(customer.get("city", "")).strip()
+        customer_pincode = str(customer.get("pincode", "")).strip()
+        customer_phone = str(customer.get("phone", "")).strip()
+        customer_email = str(customer.get("email", "")).strip()
+
+        if not all([
+            customer_name, customer_address, customer_state,
+            customer_city, customer_pincode, customer_phone, customer_email
+        ]):
+            raise ValueError("Customer details are incomplete")
+
+        if not customer_pincode.isdigit() or len(customer_pincode) != 6:
+            raise ValueError("Invalid pincode")
+
+        if not customer_phone.isdigit() or len(customer_phone) != 10:
+            raise ValueError("Invalid contact number")
+
         receipt = "bliss_" + re.sub(
             r"[^a-zA-Z0-9]",
             "",
@@ -192,8 +214,44 @@ def create_order():
             os.urandom(5).hex()
         ).upper()
 
+        # Save / update customer first
+        existing_customer = supabase.table("customers") \
+            .select("id") \
+            .eq("phone", customer_phone) \
+            .limit(1) \
+            .execute()
+
+        if existing_customer.data:
+            customer_id = existing_customer.data[0]["id"]
+
+            supabase.table("customers") \
+                .update({
+                    "name": customer_name,
+                    "email": customer_email,
+                    "phone": customer_phone,
+                    "address": customer_address,
+                    "city": customer_city,
+                    "state": customer_state,
+                    "pincode": customer_pincode
+                }) \
+                .eq("id", customer_id) \
+                .execute()
+        else:
+            customer_result = supabase.table("customers").insert({
+                "name": customer_name,
+                "email": customer_email,
+                "phone": customer_phone,
+                "address": customer_address,
+                "city": customer_city,
+                "state": customer_state,
+                "pincode": customer_pincode
+            }).execute()
+
+            customer_id = customer_result.data[0]["id"]
+
         # Save main order
         db_order = supabase.table("orders").insert({
+            "customer_id": customer_id,
             "razorpay_order_id": order["id"],
             "order_number": order_number,
             "total_amount": total,
