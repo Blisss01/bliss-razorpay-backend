@@ -214,18 +214,21 @@ def create_order():
             os.urandom(5).hex()
         ).upper()
 
-        # Save / update customer first
-        existing_customer = supabase.table("customers") \
-            .select("id") \
-            .eq("phone", customer_phone) \
-            .limit(1) \
-            .execute()
+        # Save / update customer safely.
+        # IMPORTANT: a customer-table issue must NEVER block Razorpay checkout.
+        customer_id = None
+        try:
+            existing_customer = (
+                supabase.table("customers")
+                .select("id")
+                .eq("phone", customer_phone)
+                .limit(1)
+                .execute()
+            )
 
-        if existing_customer.data:
-            customer_id = existing_customer.data[0]["id"]
-
-            supabase.table("customers") \
-                .update({
+            if existing_customer.data:
+                customer_id = existing_customer.data[0]["id"]
+                supabase.table("customers").update({
                     "name": customer_name,
                     "email": customer_email,
                     "phone": customer_phone,
@@ -233,31 +236,39 @@ def create_order():
                     "city": customer_city,
                     "state": customer_state,
                     "pincode": customer_pincode
-                }) \
-                .eq("id", customer_id) \
-                .execute()
-        else:
-            customer_result = supabase.table("customers").insert({
-                "name": customer_name,
-                "email": customer_email,
-                "phone": customer_phone,
-                "address": customer_address,
-                "city": customer_city,
-                "state": customer_state,
-                "pincode": customer_pincode
-            }).execute()
+                }).eq("id", customer_id).execute()
+            else:
+                customer_result = supabase.table("customers").insert({
+                    "name": customer_name,
+                    "email": customer_email,
+                    "phone": customer_phone,
+                    "address": customer_address,
+                    "city": customer_city,
+                    "state": customer_state,
+                    "pincode": customer_pincode
+                }).execute()
 
-            customer_id = customer_result.data[0]["id"]
+                if customer_result.data:
+                    customer_id = customer_result.data[0]["id"]
 
-        # Save main order
-        db_order = supabase.table("orders").insert({
-            "customer_id": customer_id,
+        except Exception:
+            # Do not stop payment if the customer table has a schema/RLS issue.
+            app.logger.exception("Customer save failed; continuing with payment")
+            customer_id = None
+
+        # Save main order. Keep the same working structure used before customer integration.
+        order_payload = {
             "razorpay_order_id": order["id"],
             "order_number": order_number,
             "total_amount": total,
             "payment_status": "PENDING",
             "order_status": "NEW"
-        }).execute()
+        }
+
+        if customer_id is not None:
+            order_payload["customer_id"] = customer_id
+
+        db_order = supabase.table("orders").insert(order_payload).execute()
 
         saved_order = db_order.data[0]
 
